@@ -1,0 +1,3 @@
+; 6502 Resistor Colour Calculator
+; Carmen Whitton -- https://github.com/Carmen-Git-It/
+; 2023/10/08
