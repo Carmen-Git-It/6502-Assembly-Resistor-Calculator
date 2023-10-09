@@ -1,3 +1,232 @@
 ; 6502 Resistor Colour Calculator
 ; Carmen Whitton -- https://github.com/Carmen-Git-It/
 ; 2023/10/08
+; Unlicensed
+
+; ROM routine entry points
+define		SCINIT		$ff81 ; initialize/clear screen
+define		CHRIN		$ffcf ; input character from keyboard
+define		CHROUT		$ffd2 ; output character to screen
+define		SCREEN		$ffed ; get screen size
+define		PLOT		$fff0 ; get/set cursor coordinates
+
+; zeropage variables
+define		PRINT_PTR	$00
+define		PRINT_PTR_H	$01
+define		CURRENT		$02
+define		SCRN_PTR	$03
+define		SCRN_PTR_H	$04
+define    BAND $05    ; Page to draw on for the current band
+
+; constants
+define BAND_1  2  ; page of band 1
+define BAND_2  3  ; page of band 2
+define BAND_3  4  ; page of band 3
+define BAND_4  5  ; page of band 4
+define BAND_MAX 6 ; beyond the last band page
+; --------------------------------------------------------
+
+jsr SCINIT    ; Clear screen
+lda #$00      
+sta BAND      ; Set default value of band
+
+jsr STEP      ; Go to the next band
+jsr WRITE     ; Print the text for the current band
+
+brk           ; Current end
+
+; --------------------------------------------------------
+; Rough Work
+
+get_colour:
+  lda #$02
+  ldy #$00
+  sty SCRN_PTR
+  ldx BAND_PTR
+  stx SCRN_PTR_H
+  ldx #$01  ; number of pages to fill
+
+draw:
+  sta (SCRN_PTR),y
+  iny
+  bne draw
+
+  inc SCRN_PTR_H
+  dex
+  bne draw
+
+jmp done      ; end program
+
+; ----------------------------------------------------------------------------------
+; STEP :: Moves to the next band, or finalizes
+
+STEP:
+  ldx BAND        ; check the current band
+  cpx #$00
+  bne next_band   ; if the band isn't at the default value, increment the band
+  ldx #BAND_1 
+  stx BAND        ; set the current band page for drawing
+  rts
+
+next_band:        ; Iterates to the next band
+  inx             ; Increment X
+  cpx #BAND_MAX
+  beq final_band  ; If max band after inx, we are done
+  stx BAND        ; Set the new value of band
+  rts             ; Return to main
+
+final_band: ; Sets up for the final result
+  brk       ; PLACEHOLDER
+
+
+; ----------------------------------------------------------------------------------
+; WRITE :: Prints the text for selecting the next colour
+
+WRITE:
+  ldx BAND
+  cpx #BAND_1
+  beq write_first
+  ldx BAND
+  cpx #BAND_2
+  beq write_second
+  ldx BAND
+  cpx #BAND_3
+  beq write_third
+  ldx BAND
+  cpx #BAND_4
+  beq write_fourth
+
+write_first:
+  ldy #$00
+  jsr print_band_1    ; print the band1 message
+  ldy #$00
+  jsr print_band_colours  ; print the list of colours
+  rts
+
+write_second:
+  ldy #$00
+  jsr print_band_2    ; print the band1 message
+  ldy #$00
+  jsr print_band_colours  ; print the list of colours
+  rts
+
+write_third:
+  ldy #$00
+  jsr print_band_3    ; print the band1 message
+  ldy #$00
+  jsr print_band_colours  ; print the list of colours
+  rts
+
+write_fourth:
+  ldy #$00
+  jsr print_band_1    ; print the band1 message
+  ldy #$00
+  jsr print_mul_colours  ; print the list of colours
+  rts
+
+print_band_1: lda first,y
+  beq endroutine
+  jsr CHROUT
+  iny
+  bne print_band_1
+  
+print_band_2: lda second,y
+  beq endroutine
+  jsr CHROUT
+  iny
+  bne print_band_2
+
+print_band_3: lda third,y
+  beq endroutine
+  jsr CHROUT
+  iny
+  bne print_band_3
+
+print_band_4: lda fourth,y
+  beq endroutine
+  jsr CHROUT
+  iny
+  bne print_band_4
+
+print_band_colours:  lda colours,y
+  beq endroutine
+  jsr CHROUT
+  iny
+  bne print_band_colours
+
+print_mul_colours:  lda mul_colours,y
+  beq endroutine
+  jsr CHROUT
+  iny
+  bne print_mul_colours
+
+endroutine:
+  rts
+
+colours:
+dcb "B","l","a","c","k",$0d       ;00
+dcb "B","r","o","w","n",$0d       ;09
+dcb "R","e","d",$0d               ;02
+dcb "O","r","a","n","g","e",$0d   ;08
+dcb "Y","e","l","l","o","w",$0d   ;07
+dcb "G","r","e","e","n",$0d       ;05
+dcb "B","l","u","e",$0d           ;06
+dcb "P","u","r","p","l","e",$0d   ;04
+dcb "G","r","e","y",$0d           ;0c
+dcb "W","h","i","t","e",$00       ;01
+
+mul_colours:
+dcb "B","l","a","c","k",$0d       ;00
+dcb "B","r","o","w","n",$0d       ;09
+dcb "R","e","d",$0d               ;02
+dcb "O","r","a","n","g","e",$0d   ;08
+dcb "Y","e","l","l","o","w",$0d   ;07
+dcb "G","r","e","e","n",$0d       ;05
+dcb "B","l","u","e",$0d           ;06
+dcb "P","u","r","p","l","e",$0d   ;04
+dcb "G","r","e","y",$0d           ;0c
+dcb "W","h","i","t","e",$0d       ;01
+dcb "G","o","l","d",$0d           ;08 orange for now
+dcb "S","i","l","v","e","r",$00   ;0f
+
+first:
+dcb "P", "l", "e", "a", "s", "e", 32, "s", "e"
+dcb "l", "e", "c", "t", 32, "t", "h", "e", 32
+dcb "c", "o", "l", "o", "u", "r", 32, "o", "f"
+dcb 32, "t", "h", "e", 32, "f", "i", "r", "s"
+dcb "t", 32, "b", "a", "n", "d", 32, "f", "r"
+dcb "o", "m", 32, "t", "h", "e", 32, "l", "i"
+dcb "s", "t", 32, "b", "e", "l", "o", "w", ":",$0d,$00
+
+second:
+dcb "P", "l", "e", "a", "s", "e", 32, "s", "e",
+dcb "l", "e", "c", "t", 32, "t", "h", "e", 32,
+dcb "c", "o", "l", "o", "u", "r", 32, "o", "f",
+dcb 32, "t", "h", "e", 32, "s", "e", "c", "o",
+dcb "n", "d", 32, "b", "a", "n", "d", 32, "f", "r",
+dcb "o", "m", 32, "t", "h", "e", 32, "l", "i",
+dcb "s", "t", 32, "b", "e", "l", "o", "w", ":",$0d,$00
+
+third:
+dcb "P", "l", "e", "a", "s", "e", 32, "s", "e",
+dcb "l", "e", "c", "t", 32, "t", "h", "e", 32,
+dcb "c", "o", "l", "o", "u", "r", 32, "o", "f",
+dcb 32, "t", "h", "e", 32, "t", "h", "i", "r",
+dcb "d", 32, "b", "a", "n", "d", 32, "f", "r",
+dcb "o", "m", 32, "t", "h", "e", 32, "l", "i",
+dcb "s", "t", 32, "b", "e", "l", "o", "w", 32,
+dcb "o", "r", 32, "N", "o", "n", "e",
+dcb 32, "i", "f", 32, "y", "o", "u",
+dcb 32, "h", "a", "v", "e", 32, "a",
+dcb 32, "f", "o", "u", "r", 32, "b",
+dcb "a", "n", "d", 32, "r", "e", "s",
+dcb "i", "s", "t", "o", "r", ":" ,$0d,$00
+
+fourth:
+dcb "P", "l", "e", "a", "s", "e", 32, "s", "e",
+dcb "l", "e", "c", "t", 32, "t", "h", "e", 32,
+dcb "c", "o", "l", "o", "u", "r", 32, "o", "f",
+dcb 32, "t", "h", "e", 32, "f", "o", "u", "r",
+dcb "t", "h", 32, "b", "a", "n", "d", 32, "f", "r",
+dcb "o", "m", 32, "t", "h", "e", 32, "l", "i",
+dcb "s", "t", 32, "b", "e", "l", "o", "w", ":",$0d,$00
