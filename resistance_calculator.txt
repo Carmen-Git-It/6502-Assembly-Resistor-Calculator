@@ -2,6 +2,7 @@
 ; Carmen Whitton -- https://github.com/Carmen-Git-It/
 ; 2023/10/08
 ; Unlicensed
+; https://github.com/Carmen-Git-It/6502-Assembly-Resistor-Calculator
 
 ; ROM routine entry points
 define		SCINIT		$ff81 ; initialize/clear screen
@@ -334,8 +335,6 @@ CALCULATE:
 
   lda BAND_VALUE_1
   jsr print_num
-  lda #$2e           ; print decimal
-  jsr CHROUT
   lda BAND_VALUE_2
   jsr print_num
   lda BAND_VALUE_3
