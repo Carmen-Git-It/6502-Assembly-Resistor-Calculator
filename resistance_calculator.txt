@@ -16,7 +16,14 @@ define		PRINT_PTR_H	$01
 define		CURRENT		$02
 define		SCRN_PTR	$03
 define		SCRN_PTR_H	$04
-define    BAND $05    ; Page to draw on for the current band
+define    BAND $05          ; Page to draw on for the current band
+define    BAND_VALUE_1 $06  ; Stores the value of band 1
+define    BAND_VALUE_2 $07  ; Stores the value of band 2
+define    BAND_VALUE_3 $08  ; Stores the value of band 3
+define    BAND_VALUE_4 $09  ; Stores the value of band 4
+define    LIST_MAX $0a      ; max length of the colour list
+define    COLOUR_MAP $0b    ; next 12 entries are the values of the colours in order of the selection
+; TODO: store 2 band values per byte
 
 ; constants
 define BAND_1  2  ; page of band 1
@@ -24,38 +31,66 @@ define BAND_2  3  ; page of band 2
 define BAND_3  4  ; page of band 3
 define BAND_4  5  ; page of band 4
 define BAND_MAX 6 ; beyond the last band page
+define LIST_MAX 10
 ; --------------------------------------------------------
 
+; Colour Map Initialization
 jsr SCINIT    ; Clear screen
-lda #$00      
-sta BAND      ; Set default value of band
+lda #$00
+ldx #$00
+sta COLOUR_MAP    ; BLACK
+lda #$09        
+inx
+sta COLOUR_MAP,x  ; BROWN
+lda #$02
+inx
+sta COLOUR_MAP,x  ; RED
+lda #$08
+inx
+sta COLOUR_MAP,x  ; ORANGE
+lda #$07
+inx
+sta COLOUR_MAP,x  ; YELLOW
+lda #$05
+inx
+sta COLOUR_MAP,x  ; GREEN
+lda #$06
+inx
+sta COLOUR_MAP,x  ; BLUE
+lda #$04
+inx
+sta COLOUR_MAP,x  ; PURPLE
+lda #$0c
+inx
+sta COLOUR_MAP,x  ; GREY
+lda #$01
+inx
+sta COLOUR_MAP,x  ; WHITE
+lda #$08
+inx
+sta COLOUR_MAP,x  ; GOLD (orange is as close to gold as I can get, unfortunately)
+lda #$0f
+inx
+sta COLOUR_MAP,x  ; LIGHT GREY
 
-jsr STEP      ; Go to the next band
-jsr WRITE     ; Print the text for the current band
+; Other init
+start:
+  lda #$0a
+  sta LIST_MAX  ; set default value of colour list size
+  lda #$00      
+  sta BAND      ; Set default value of band
 
-brk           ; Current end
+; Main loop
+loop:
+  jsr STEP      ; Go to the next band
+  jsr WRITE     ; Print the text for the current band
+  lda #$01      ; Default select the first colour entry
+  jsr SELECT    ; Select colour subroutine
+  jsr SCINIT    ; Clear screen
+  jsr DRAW      ; Draw the selected colour
+  jmp loop
 
-; --------------------------------------------------------
-; Rough Work
-
-get_colour:
-  lda #$02
-  ldy #$00
-  sty SCRN_PTR
-  ldx BAND_PTR
-  stx SCRN_PTR_H
-  ldx #$01  ; number of pages to fill
-
-draw:
-  sta (SCRN_PTR),y
-  iny
-  bne draw
-
-  inc SCRN_PTR_H
-  dex
-  bne draw
-
-jmp done      ; end program
+;brk             ; Current end
 
 ; ----------------------------------------------------------------------------------
 ; STEP :: Moves to the next band, or finalizes
@@ -92,6 +127,8 @@ WRITE:
   ldx BAND
   cpx #BAND_3
   beq write_third
+  lda #$12
+  sta LIST_MAX        ; change the max list length to account for the two new colours.
   ldx BAND
   cpx #BAND_4
   beq write_fourth
@@ -163,6 +200,88 @@ print_mul_colours:  lda mul_colours,y
 endroutine:
   rts
 
+; ----------------------------------------------------------------------------------
+; SELECT :: Select a colour out of the list
+
+SELECT:
+  sta CURRENT     ; Store the currently highlighted colour
+  jsr HIGHLIGHT ; Highlight the currently selected line
+
+getKey:
+  jsr CHRIN     ; Get keyboard input
+  cmp #$80      ; Cursor up
+  bne try_down  ; check if cursor down
+
+  lda CURRENT
+  cmp #$01      ; Don't allow cursor up at the top of the list
+  beq getKey
+  jsr HIGHLIGHT
+  dec CURRENT
+  jsr HIGHLIGHT
+  jmp getKey
+
+try_down:
+  cmp #$82      ; Cursor down
+  bne try_enter    ; if it isn't cursor down it's unimportant
+
+  lda CURRENT
+  cmp LIST_MAX  ; Down go down if it's already at the bottom
+  beq getKey
+  jsr HIGHLIGHT
+  inc CURRENT
+  jsr HIGHLIGHT
+  jmp getKey
+
+try_enter:
+  cmp #$0d      ; Return / Enter
+  bne getKey
+
+return:         ; Return from the current subroutine
+  lda CURRENT
+  rts           
+
+; ---------------------------------------------------------------------------------- 
+; HIGHLIGHT :: Highlight the CURRENT line in the menu
+
+HIGHLIGHT:
+  ldy CURRENT   ; Load the currently selected index
+  ldx #$00      ; Set the starting column
+  clc           ; Clear the carry so PLOT sets the cursor
+  jsr PLOT      ; Set the cursor
+
+highlight_next:
+  sec           ; Set the carry so plot retrieves cursor
+  jsr PLOT      ; Retrieve cursor
+  eor #$80      ; XOR A to swap the background and foreground colours (black back white text)
+  jsr CHROUT    ; Print A to cursor position
+
+  inx           ; move to the next column
+  cpx #20       ; don't highlight past #20
+  bne highlight_next
+
+  rts
+
+; ---------------------------------------------------------------------------------- 
+; DRAW :: Draw the selected colour in its designated band area
+
+DRAW:
+  lda CURRENT       ; load in the currently selected index
+  sec               ; set carry flag
+  sbc #$01          ; subtract one for the offset between the start of the list and the 0 index
+  tax               ; transfer A to X to use as the index against the colour map
+  lda COLOUR_MAP,x  ; load the colour code into A
+  ldy #$00          
+  sty SCRN_PTR
+  ldx BAND          ; load the page of the display to draw in for the current band
+  stx SCRN_PTR_H    ; high pointer for the display
+  
+draw_page:
+  sta (SCRN_PTR),y  ; draw the colour onto the given "pixel"
+  iny
+  bne draw_page
+  
+  rts
+
 colours:
 dcb "B","l","a","c","k",$0d       ;00
 dcb "B","r","o","w","n",$0d       ;09
@@ -212,15 +331,9 @@ dcb "P", "l", "e", "a", "s", "e", 32, "s", "e",
 dcb "l", "e", "c", "t", 32, "t", "h", "e", 32,
 dcb "c", "o", "l", "o", "u", "r", 32, "o", "f",
 dcb 32, "t", "h", "e", 32, "t", "h", "i", "r",
-dcb "d", 32, "b", "a", "n", "d", 32, "f", "r",
+dcb "r", "d", 32, "b", "a", "n", "d", 32, "f", "r",
 dcb "o", "m", 32, "t", "h", "e", 32, "l", "i",
-dcb "s", "t", 32, "b", "e", "l", "o", "w", 32,
-dcb "o", "r", 32, "N", "o", "n", "e",
-dcb 32, "i", "f", 32, "y", "o", "u",
-dcb 32, "h", "a", "v", "e", 32, "a",
-dcb 32, "f", "o", "u", "r", 32, "b",
-dcb "a", "n", "d", 32, "r", "e", "s",
-dcb "i", "s", "t", "o", "r", ":" ,$0d,$00
+dcb "s", "t", 32, "b", "e", "l", "o", "w", ":",$0d,$00
 
 fourth:
 dcb "P", "l", "e", "a", "s", "e", 32, "s", "e",
