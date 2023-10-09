@@ -22,8 +22,10 @@ define    BAND_VALUE_2 $07  ; Stores the value of band 2
 define    BAND_VALUE_3 $08  ; Stores the value of band 3
 define    BAND_VALUE_4 $09  ; Stores the value of band 4
 define    LIST_MAX $0a      ; max length of the colour list
-define    COLOUR_MAP $0b    ; next 12 entries are the values of the colours in order of the selection
+define    LIST_MIN $0b      ; min length of the colour list
+define    COLOUR_MAP $0c    ; next 12 entries are the values of the colours in order of the selection
 ; TODO: store 2 band values per byte
+
 
 ; constants
 define BAND_1  2  ; page of band 1
@@ -31,11 +33,9 @@ define BAND_2  3  ; page of band 2
 define BAND_3  4  ; page of band 3
 define BAND_4  5  ; page of band 4
 define BAND_MAX 6 ; beyond the last band page
-define LIST_MAX 10
 ; --------------------------------------------------------
 
 ; Colour Map Initialization
-jsr SCINIT    ; Clear screen
 lda #$00
 ldx #$00
 sta COLOUR_MAP    ; BLACK
@@ -75,8 +75,11 @@ sta COLOUR_MAP,x  ; LIGHT GREY
 
 ; Other init
 start:
+  jsr SCINIT    ; Clear screen
   lda #$0a
   sta LIST_MAX  ; set default value of colour list size
+  lda #$01
+  sta LIST_MIN  ; set default value of the colour list min
   lda #$00      
   sta BAND      ; Set default value of band
 
@@ -90,7 +93,7 @@ loop:
   jsr DRAW      ; Draw the selected colour
   jmp loop
 
-;brk             ; Current end
+brk             ; Current end
 
 ; ----------------------------------------------------------------------------------
 ; STEP :: Moves to the next band, or finalizes
@@ -105,14 +108,13 @@ STEP:
 
 next_band:        ; Iterates to the next band
   inx             ; Increment X
-  cpx #BAND_MAX
-  beq final_band  ; If max band after inx, we are done
+  cpx #BAND_MAX   ; Compare against last band
+  beq final_band
   stx BAND        ; Set the new value of band
   rts             ; Return to main
 
-final_band: ; Sets up for the final result
-  brk       ; PLACEHOLDER
-
+final_band:
+  jmp CALCULATE   ; Jump to calculation state
 
 ; ----------------------------------------------------------------------------------
 ; WRITE :: Prints the text for selecting the next colour
@@ -156,7 +158,7 @@ write_third:
 
 write_fourth:
   ldy #$00
-  jsr print_band_1    ; print the band1 message
+  jsr print_band_4    ; print the band1 message
   ldy #$00
   jsr print_mul_colours  ; print the list of colours
   rts
@@ -213,7 +215,7 @@ getKey:
   bne try_down  ; check if cursor down
 
   lda CURRENT
-  cmp #$01      ; Don't allow cursor up at the top of the list
+  cmp LIST_MIN      ; Don't allow cursor up at the top of the list
   beq getKey
   jsr HIGHLIGHT
   dec CURRENT
@@ -222,7 +224,7 @@ getKey:
 
 try_down:
   cmp #$82      ; Cursor down
-  bne try_enter    ; if it isn't cursor down it's unimportant
+  bne try_enter ; if it isn't cursor down it's unimportant
 
   lda CURRENT
   cmp LIST_MAX  ; Down go down if it's already at the bottom
@@ -233,11 +235,46 @@ try_down:
   jmp getKey
 
 try_enter:
-  cmp #$0d      ; Return / Enter
+  cmp #$0d          ; Return / Enter
   bne getKey
+  lda BAND_VALUE_4  ; check if this is the calculation selection
+  cmp #$00
+  bne return        ; if it's for the calculation, just go to return
 
-return:         ; Return from the current subroutine
+store_value:    ; Store the value of the selected band
   lda CURRENT
+  sec 
+  sbc #$01      ; subtract by 1 to get actual value due to non-zero index
+  
+  ldx BAND
+  cpx #BAND_2   ; compare to figure out which band we're on
+  beq store_2
+
+  ldx BAND
+  cpx #BAND_3
+  beq store_3
+
+  ldx BAND
+  cpx #BAND_4
+  beq store_4
+  
+store_1:
+  sta BAND_VALUE_1
+  jmp return
+
+store_2:
+  sta BAND_VALUE_2
+  jmp return
+
+store_3:
+  sta BAND_VALUE_3
+  jmp return
+
+store_4:
+  sta BAND_VALUE_4
+
+return:       ; Return from the current subroutine
+  lda CURRENT 
   rts           
 
 ; ---------------------------------------------------------------------------------- 
@@ -281,6 +318,129 @@ draw_page:
   bne draw_page
   
   rts
+
+; ---------------------------------------------------------------------------------- 
+; CALCULATE :: Calculate the final resistance of the resistor, offer to restart or end
+
+CALCULATE:
+  ; TIME FOR MATH
+  jsr PRINT
+
+  dcb "R","e","s","u","l","t",":",32
+  dcb 32,32,32,32,32,32,32
+  dcb 32,32,32,32,32,32,32
+  dcb 32,32,32,32,32,32,32
+  dcb 00
+
+  lda BAND_VALUE_1
+  jsr print_num
+  lda #$2e           ; print decimal
+  jsr CHROUT
+  lda BAND_VALUE_2
+  jsr print_num
+  lda BAND_VALUE_3
+  jsr print_num
+  
+  jsr PRINT
+  dcb "x",32,"1","0",32,"^",32,00
+
+  ldx BAND_VALUE_4
+  cpx #$0a
+  beq print_neg
+  ldx BAND_VALUE_4
+  cpx #$0b
+  beq print_neg
+  pos:
+    lda BAND_VALUE_4
+    jsr print_num
+
+  jsr PRINT
+  dcb 32,"o", "h", "m", "s", $0d
+  dcb "W", "o", "u", "l", "d", 32, "y"
+  dcb "o", "u", 32, "l", "i", "k", "e"
+  dcb 32, "t", "o", 32, "e", "n", "t"
+  dcb "e", "r", 32, "a", "n", "o", "t"
+  dcb "h", "e", "r", 32, "r", "e", "s"
+  dcb "i", "s", "t", "o", "r", "?", $0d, $0d
+  dcb "Y","e","s",$0d
+  dcb "N","o",$00
+
+  lda #$03
+  sta LIST_MIN
+  lda #$04
+  sta LIST_MAX
+
+  jsr SELECT
+  cmp #$03
+  beq restart
+  brk;
+
+print_num:
+  and #$0f
+  ora #$30
+  jsr CHROUT
+  rts
+
+print_neg:
+  lda BAND_VALUE_4
+  sec
+  sbc #$09
+  sta BAND_VALUE_4
+  lda #$2d
+  jsr CHROUT
+  jmp pos
+
+restart:
+  lda #$00
+  sta BAND_VALUE_1
+  sta BAND_VALUE_2
+  sta BAND_VALUE_3
+  sta BAND_VALUE_4
+  jmp start
+
+; --------------------------------------------------------
+; Print a message
+; 
+; Prints the message in memory immediately after the 
+; JSR PRINT. The message must be null-terminated and
+; 255 characters maximum in length.
+
+PRINT:		pla
+		clc
+		adc #$01
+		sta PRINT_PTR
+		pla
+		sta PRINT_PTR_H
+
+		tya
+		pha
+
+		ldy #$00
+print_next:	lda (PRINT_PTR),y
+		beq print_done
+		
+		jsr CHROUT
+		iny
+		jmp print_next
+
+print_done:	tya
+		clc
+		adc PRINT_PTR
+		sta PRINT_PTR
+
+		lda PRINT_PTR_H
+		adc #$00
+		sta PRINT_PTR_H
+
+		pla
+		tay
+
+		lda PRINT_PTR_H
+		pha
+		lda PRINT_PTR
+		pha
+
+		rts
 
 colours:
 dcb "B","l","a","c","k",$0d       ;00
