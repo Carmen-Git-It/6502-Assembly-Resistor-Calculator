@@ -6,34 +6,33 @@
 
 ; ROM routine entry points
 define		SCINIT		$ff81 ; initialize/clear screen
-define		CHRIN		$ffcf ; input character from keyboard
+define		CHRIN		  $ffcf ; input character from keyboard
 define		CHROUT		$ffd2 ; output character to screen
 define		SCREEN		$ffed ; get screen size
-define		PLOT		$fff0 ; get/set cursor coordinates
+define		PLOT		  $fff0 ; get/set cursor coordinates
 
 ; zeropage variables
-define		PRINT_PTR	$00
-define		PRINT_PTR_H	$01
-define		CURRENT		$02
-define		SCRN_PTR	$03
-define		SCRN_PTR_H	$04
-define    BAND $05          ; Page to draw on for the current band
+define		PRINT_PTR	   $00
+define		PRINT_PTR_H	 $01
+define		CURRENT		   $02
+define		SCRN_PTR	   $03
+define		SCRN_PTR_H	 $04
+define    BAND         $05  ; Page to draw on for the current band
 define    BAND_VALUE_1 $06  ; Stores the value of band 1
 define    BAND_VALUE_2 $07  ; Stores the value of band 2
 define    BAND_VALUE_3 $08  ; Stores the value of band 3
 define    BAND_VALUE_4 $09  ; Stores the value of band 4
-define    LIST_MAX $0a      ; max length of the colour list
-define    LIST_MIN $0b      ; min length of the colour list
-define    COLOUR_MAP $0c    ; next 12 entries are the values of the colours in order of the selection
+define    LIST_MAX     $0a  ; max length of the colour list
+define    LIST_MIN     $0b  ; min length of the colour list
+define    COLOUR_MAP   $0c  ; next 12 entries are the values of the colours in order of the selection
 ; TODO: store 2 band values per byte
 
-
 ; constants
-define BAND_1  2  ; page of band 1
-define BAND_2  3  ; page of band 2
-define BAND_3  4  ; page of band 3
-define BAND_4  5  ; page of band 4
-define BAND_MAX 6 ; beyond the last band page
+define BAND_1   2  ; page of band 1
+define BAND_2   3  ; page of band 2
+define BAND_3   4  ; page of band 3
+define BAND_4   5  ; page of band 4
+define BAND_MAX 6  ; beyond the last band page
 ; --------------------------------------------------------
 
 ; Colour Map Initialization
@@ -333,27 +332,27 @@ CALCULATE:
   dcb 32,32,32,32,32,32,32
   dcb 00
 
-  lda BAND_VALUE_1
+  lda BAND_VALUE_1    ; Print the first band value
   jsr print_num
-  lda BAND_VALUE_2
+  lda BAND_VALUE_2    ; Print the second band value
   jsr print_num
-  lda BAND_VALUE_3
+  lda BAND_VALUE_3    ; Print the third band value
   jsr print_num
   
-  jsr PRINT
+  jsr PRINT           ; Use the PRINT subroutine to print the "x 10^"
   dcb "x",32,"1","0",32,"^",32,00
 
+  ldx BAND_VALUE_4    ; Load the fourth band
+  cpx #$0a            ; If the band is gold
+  beq print_neg       ; Print the negative sign and change the value to 01
   ldx BAND_VALUE_4
-  cpx #$0a
-  beq print_neg
-  ldx BAND_VALUE_4
-  cpx #$0b
-  beq print_neg
+  cpx #$0b            ; If the band is silver
+  beq print_neg       ; Print the negative sign and change the value to 02
   pos:
-    lda BAND_VALUE_4
-    jsr print_num
+    lda BAND_VALUE_4  ; Load the updated value
+    jsr print_num     ; Print the number
 
-  jsr PRINT
+  jsr PRINT ; Print the units, and the restart prompt + menu
   dcb 32,"o", "h", "m", "s", $0d
   dcb "W", "o", "u", "l", "d", 32, "y"
   dcb "o", "u", 32, "l", "i", "k", "e"
@@ -364,32 +363,32 @@ CALCULATE:
   dcb "Y","e","s",$0d
   dcb "N","o",$00
 
-  lda #$03
-  sta LIST_MIN
+  lda #$03        ; Set the list minimum to the row of "Yes"
+  sta LIST_MIN    
   lda #$04
-  sta LIST_MAX
+  sta LIST_MAX    ; Set the list maximum to the row of "No"
 
-  jsr SELECT
-  cmp #$03
+  jsr SELECT      ; Use the SELECT subroutine to get the menu selection
+  cmp #$03        ; If selected "Yes" restart, else break
   beq restart
   brk;
 
-print_num:
-  and #$0f
-  ora #$30
+print_num:        ; Prints the ascii character for a given number
+  and #$0f        ; AND with 0f to remove all high byte values while keeping low byte values
+  ora #$30        ; Bitwise OR with 00110000 to convert the value of the number into its ascii character value
   jsr CHROUT
   rts
 
-print_neg:
+print_neg:          ; Prints the negative sign, converts the band value
   lda BAND_VALUE_4
-  sec
-  sbc #$09
-  sta BAND_VALUE_4
-  lda #$2d
+  sec               ; Set the carry for subtraction
+  sbc #$09          ; subtract 9 to get the actual value of the band (gold = -1, silver = -2)
+  sta BAND_VALUE_4  
+  lda #$2d          ; Print the minus sign
   jsr CHROUT
   jmp pos
 
-restart:
+restart:            ; Resets necessary values, jumps to start
   lda #$00
   sta BAND_VALUE_1
   sta BAND_VALUE_2
